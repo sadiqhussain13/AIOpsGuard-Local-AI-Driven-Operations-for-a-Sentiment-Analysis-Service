@@ -1,0 +1,14 @@
+stages:
+  generate_data:
+    cmd: python anomaly_detector/train_anomaly_model.py --data data/logs.csv --output model/anomaly_model.pkl
+    deps:
+      - anomaly_detector/train_anomaly_model.py
+      - data/logs.csv
+    outs:
+      - model/anomaly_model.pkl
+
+params:
+  - params.yaml:
+      - train.contamination
+      - train.n_estimators
+      - train.random_state

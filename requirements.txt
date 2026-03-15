@@ -1,0 +1,18 @@
+# Top-level dev dependencies for running tests and CI
+pytest>=8.1,<9
+ruff>=0.4,<1
+flask>=3.0,<4
+prometheus-client>=0.20,<1
+scikit-learn>=1.4,<2
+numpy>=1.26,<3
+pandas>=2.2,<3
+locust>=2.28,<3
+requests>=2.31,<3
+langchain>=0.2,<0.4
+langchain-ollama>=0.1,<0.4
+mlflow>=2.12,<3
+dvc>=3.49,<4
+ansible>=9,<10
+gunicorn>=22,<24
+uvicorn[standard]>=0.29,<1
+asgiref>=3.7,<4
