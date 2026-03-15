@@ -1,0 +1,143 @@
+---
+# Ansible playbook to deploy AIOpsGuard on Minikube
+# Usage: ansible-playbook ansible/deploy.yml
+- name: Deploy AIOpsGuard on Minikube
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    minikube_driver: docker
+    minikube_cpus: 4
+    minikube_memory: 8192
+    app_image: aiopsguard/sentiment-app:latest
+    anomaly_image: aiopsguard/anomaly-detector:latest
+    k8s_manifest_dir: "{{ playbook_dir }}/../k8s/overlays/dev"
+    model_dir: "{{ playbook_dir }}/../model"
+    data_dir: "{{ playbook_dir }}/../data"
+
+  tasks:
+    # -----------------------------------------------------------------------
+    # 1. Start Minikube
+    # -----------------------------------------------------------------------
+    - name: Check if Minikube is already running
+      ansible.builtin.command: minikube status
+      register: minikube_status
+      failed_when: false
+      changed_when: false
+
+    - name: Start Minikube
+      ansible.builtin.command: >
+        minikube start
+          --driver={{ minikube_driver }}
+          --cpus={{ minikube_cpus }}
+          --memory={{ minikube_memory }}
+          --kubernetes-version=stable
+      when: "'Running' not in minikube_status.stdout"
+      register: minikube_start
+      changed_when: minikube_start.rc == 0
+
+    - name: Enable Minikube metrics-server addon
+      ansible.builtin.command: minikube addons enable metrics-server
+      register: addon_result
+      changed_when: "'enabled' in addon_result.stdout"
+      failed_when: false
+
+    # -----------------------------------------------------------------------
+    # 2. Build Docker images
+    # -----------------------------------------------------------------------
+    - name: Configure Docker to use Minikube's daemon
+      ansible.builtin.command: minikube -p minikube docker-env
+      register: docker_env
+      changed_when: false
+
+    - name: Build Flask app Docker image inside Minikube
+      community.docker.docker_image:
+        name: aiopsguard/sentiment-app
+        tag: latest
+        build:
+          path: "{{ playbook_dir }}/../app"
+          dockerfile: Dockerfile
+        source: build
+      environment:
+        DOCKER_HOST: "unix:///var/run/docker.sock"
+
+    - name: Build Anomaly detector Docker image inside Minikube
+      community.docker.docker_image:
+        name: aiopsguard/anomaly-detector
+        tag: latest
+        build:
+          path: "{{ playbook_dir }}/../anomaly_detector"
+          dockerfile: Dockerfile
+        source: build
+      environment:
+        DOCKER_HOST: "unix:///var/run/docker.sock"
+
+    # -----------------------------------------------------------------------
+    # 3. Load images into Minikube registry
+    # -----------------------------------------------------------------------
+    - name: Load sentiment-app image into Minikube
+      ansible.builtin.command: minikube image load {{ app_image }}
+      register: load_app
+      changed_when: load_app.rc == 0
+
+    - name: Load anomaly-detector image into Minikube
+      ansible.builtin.command: minikube image load {{ anomaly_image }}
+      register: load_anomaly
+      changed_when: load_anomaly.rc == 0
+
+    # -----------------------------------------------------------------------
+    # 4. Train anomaly model and load into cluster (via job)
+    # -----------------------------------------------------------------------
+    - name: Install Python dependencies for anomaly training
+      ansible.builtin.pip:
+        requirements: "{{ playbook_dir }}/../anomaly_detector/requirements.txt"
+        extra_args: "--quiet"
+
+    - name: Train anomaly detection model
+      ansible.builtin.command: >
+        python {{ playbook_dir }}/../anomaly_detector/train_anomaly_model.py
+          --data {{ data_dir }}/logs.csv
+          --output {{ model_dir }}/anomaly_model.pkl
+      environment:
+        MLFLOW_TRACKING_URI: "http://localhost:30501"
+      register: train_result
+      changed_when: true
+      failed_when: false
+
+    # -----------------------------------------------------------------------
+    # 5. Apply Kubernetes manifests
+    # -----------------------------------------------------------------------
+    - name: Apply K8s manifests with kustomize
+      ansible.builtin.command: kubectl apply -k {{ k8s_manifest_dir }}
+      register: kubectl_apply
+      changed_when: "'configured' in kubectl_apply.stdout or 'created' in kubectl_apply.stdout"
+
+    - name: Wait for sentiment-app deployment to be ready
+      ansible.builtin.command: >
+        kubectl rollout status deployment/sentiment-app --timeout=120s
+      register: rollout_status
+      changed_when: false
+
+    - name: Wait for anomaly-detector deployment to be ready
+      ansible.builtin.command: >
+        kubectl rollout status deployment/anomaly-detector --timeout=120s
+      register: anomaly_rollout
+      changed_when: false
+      failed_when: false
+
+    # -----------------------------------------------------------------------
+    # 6. Print service URLs
+    # -----------------------------------------------------------------------
+    - name: Get Minikube IP
+      ansible.builtin.command: minikube ip
+      register: minikube_ip
+      changed_when: false
+
+    - name: Print service endpoints
+      ansible.builtin.debug:
+        msg:
+          - "Flask API:    http://{{ minikube_ip.stdout }}:30080/analyze"
+          - "Grafana UI:   http://{{ minikube_ip.stdout }}:30300  (admin/admin)"
+          - "Prometheus:   http://{{ minikube_ip.stdout }}:30090"
+          - "MLflow UI:    http://{{ minikube_ip.stdout }}:30501"

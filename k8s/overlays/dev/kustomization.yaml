@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: default
+
+resources:
+  - ../../base/sentiment-deployment.yaml
+  - ../../base/sentiment-service.yaml
+  - ../../base/mlflow-deployment.yaml
+  - ../../base/anomaly-detector-deployment.yaml
+  - ../../base/prometheus.yaml
+  - ../../base/loki.yaml
+  - ../../base/grafana.yaml
+  - secrets.yaml
+
+commonLabels:
+  environment: dev
+  project: aiopsguard

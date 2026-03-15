@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Linter caches
+.ruff_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# Model artifacts (tracked by DVC, not git)
+model/
+metrics/
+
+# MLflow run artifacts
+mlruns/
+mlartifacts/
+
+# DVC cache
+.dvc/cache
+.dvc/tmp
+.dvc/__pycache__
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Secrets / environment files
+.env.*
+!.env.example
+
+# Kubernetes generated files
+*.kubeconfig
+
+# Temporary files
+/tmp/

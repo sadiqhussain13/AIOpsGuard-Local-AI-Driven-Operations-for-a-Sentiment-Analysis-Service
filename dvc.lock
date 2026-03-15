@@ -1,0 +1,16 @@
+schema: '2.0'
+stages:
+  train:
+    cmd: python anomaly_detector/train_anomaly_model.py --data data/logs.csv --output
+      model/anomaly_model.pkl
+    deps:
+    - path: anomaly_detector/train_anomaly_model.py
+      md5: placeholder_hash_train_script
+      size: 5292
+    - path: data/logs.csv
+      md5: placeholder_hash_data_csv
+      size: 55000
+    outs:
+    - path: model/anomaly_model.pkl
+      md5: placeholder_hash_model_pkl
+      size: 250000

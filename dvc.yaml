@@ -1,0 +1,13 @@
+schema_version: 2
+
+stages:
+  train:
+    cmd: python anomaly_detector/train_anomaly_model.py --data data/logs.csv --output model/anomaly_model.pkl
+    deps:
+      - anomaly_detector/train_anomaly_model.py
+      - data/logs.csv
+    outs:
+      - model/anomaly_model.pkl
+    metrics:
+      - metrics/train_metrics.json:
+          cache: false
