@@ -4,9 +4,6 @@ global:
   external_labels:
     monitor: "aiopsguard"
 
-rule_files:
-  - "alert_rules.yml"
-
 alerting:
   alertmanagers:
     - static_configs:
@@ -15,12 +12,12 @@ alerting:
 scrape_configs:
   - job_name: "sentiment-app"
     static_configs:
-      - targets: ["localhost:5000"]
+      - targets: ["sentiment-app:5000"]
     metrics_path: /metrics
 
   - job_name: "anomaly-detector"
     static_configs:
-      - targets: ["localhost:8080"]
+      - targets: ["anomaly-detector:8080"]
     metrics_path: /metrics
 
   - job_name: "prometheus"

@@ -1,4 +1,4 @@
-version: "3.9"
+# version: "3.9"
 
 services:
   # ── Ollama (local LLM) ─────────────────────────────────────────────────────
@@ -10,7 +10,7 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,7 +32,7 @@ services:
       ollama:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=3)"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -55,22 +55,23 @@ services:
 
   # ── MLflow ────────────────────────────────────────────────────────────────
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.12.1
+    image: python:3.10-slim
     container_name: mlflow
     ports:
       - "5001:5001"
     command: >
+      sh -c "pip install --no-cache-dir mlflow==2.12.1 &&
       mlflow server
         --host 0.0.0.0
         --port 5001
         --backend-store-uri sqlite:////mlflow/mlflow.db
-        --default-artifact-root /mlflow/artifacts
+        --default-artifact-root /mlflow/artifacts"
     volumes:
       - mlflow_data:/mlflow
 
   # ── Prometheus ────────────────────────────────────────────────────────────
   prometheus:
-    image: prom/prometheus:v2.51.2
+    image: prom/prometheus:v2.49.1
     container_name: prometheus
     ports:
       - "9090:9090"
