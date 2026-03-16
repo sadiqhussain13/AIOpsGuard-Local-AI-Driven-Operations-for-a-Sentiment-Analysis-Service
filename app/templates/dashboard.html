@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AIOpsGuard Command Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/dashboard.css" />
+</head>
+<body>
+  <div class="bg-noise"></div>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">AIOPSGUARD</p>
+      <h1>Operations Command Console</h1>
+    </div>
+    <div class="top-actions">
+      <a class="btn ghost" href="http://localhost:9090" target="_blank" rel="noreferrer">Prometheus</a>
+      <a class="btn ghost" href="http://localhost:3000" target="_blank" rel="noreferrer">Grafana</a>
+      <a class="btn ghost" href="http://localhost:5001" target="_blank" rel="noreferrer">MLflow</a>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="panel sentiment">
+      <h2>Sentiment Test</h2>
+      <p class="muted">Classify user text and capture API latency.</p>
+      <form id="sentiment-form">
+        <textarea id="sentiment-text" placeholder="Type customer feedback here..." required></textarea>
+        <button class="btn" type="submit">Analyze Sentiment</button>
+      </form>
+      <div id="sentiment-result" class="result"></div>
+    </section>
+
+    <section class="panel health">
+      <h2>Service Health</h2>
+      <p class="muted">Live dependency checks every 8 seconds.</p>
+      <div id="health-grid" class="health-grid"></div>
+    </section>
+
+    <section class="panel metrics">
+      <h2>Metrics Pulse</h2>
+      <p class="muted">5-minute rates from Prometheus.</p>
+      <div class="metric-cards" id="metric-cards"></div>
+      <svg id="sparkline" viewBox="0 0 320 80" preserveAspectRatio="none"></svg>
+      <div class="links-row">
+        <a href="http://localhost:9090/targets" target="_blank" rel="noreferrer">Check Targets</a>
+        <a href="http://localhost:3000" target="_blank" rel="noreferrer">Open Dashboards</a>
+      </div>
+    </section>
+
+    <section class="panel anomaly">
+      <h2>Anomaly Check</h2>
+      <p class="muted">Run ad-hoc checks against the model.</p>
+      <form id="anomaly-form" class="anomaly-grid">
+        <label>response_time_ms <input type="number" step="0.01" name="response_time_ms" value="200" required /></label>
+        <label>cpu_usage_pct <input type="number" step="0.01" name="cpu_usage_pct" value="40" required /></label>
+        <label>memory_usage_pct <input type="number" step="0.01" name="memory_usage_pct" value="50" required /></label>
+        <label>error_rate <input type="number" step="0.001" name="error_rate" value="0.02" required /></label>
+        <label>request_count <input type="number" step="1" name="request_count" value="300" required /></label>
+        <button class="btn" type="submit">Run Prediction</button>
+      </form>
+      <div id="anomaly-result" class="result"></div>
+    </section>
+
+    <section class="panel incident">
+      <h2>Incident Assistant</h2>
+      <p class="muted">Summarizes telemetry and proposes remediation commands.</p>
+      <button id="incident-btn" class="btn">Generate Incident Analysis</button>
+      <pre id="incident-reasoning" class="codeblock"></pre>
+      <pre id="incident-script" class="codeblock"></pre>
+      <div id="incident-logs" class="logbox"></div>
+    </section>
+
+    <section class="panel fault">
+      <h2>Fault Injection Control</h2>
+      <p class="muted">Tune runtime failure behavior for controlled chaos testing.</p>
+      <div class="slider-wrap">
+        <input id="failure-slider" type="range" min="0" max="1" step="0.01" value="0.05" />
+        <span id="failure-value">0.05</span>
+      </div>
+      <button id="failure-apply" class="btn warning">Apply Failure Rate</button>
+      <p id="failure-status" class="muted"></p>
+    </section>
+  </main>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>

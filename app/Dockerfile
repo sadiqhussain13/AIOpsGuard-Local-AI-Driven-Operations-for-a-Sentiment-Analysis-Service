@@ -21,6 +21,8 @@ COPY --from=builder /install /usr/local
 
 # Copy application source
 COPY app.py fault_injector.py metrics.py ./
+COPY templates ./templates
+COPY static ./static
 
 USER appuser
 

@@ -26,6 +26,10 @@ services:
     environment:
       OLLAMA_BASE_URL: "http://ollama:11434"
       OLLAMA_MODEL: "mistral"
+      PROMETHEUS_URL: "http://prometheus:9090"
+      LOKI_URL: "http://loki:3100"
+      MLFLOW_URL: "http://mlflow:5001"
+      ANOMALY_DETECTOR_URL: "http://anomaly-detector:8080"
       FAILURE_RATE: "0.05"
       PORT: "5000"
     depends_on:
