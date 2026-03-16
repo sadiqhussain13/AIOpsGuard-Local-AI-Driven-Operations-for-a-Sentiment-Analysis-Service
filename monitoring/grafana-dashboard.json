@@ -89,7 +89,7 @@
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -110,7 +110,7 @@
       "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
           "expr": "rate(request_total[5m])",
           "legendFormat": "Request Rate",
           "refId": "A"
@@ -120,7 +120,7 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -141,8 +141,8 @@
       "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(request_error_total[5m]) / rate(request_total[5m])",
+          "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
+          "expr": "(sum(rate(request_error_total[5m])) / clamp_min(sum(rate(request_total[5m])), 1e-9)) or vector(0)",
           "legendFormat": "Error Rate",
           "refId": "A"
         }
@@ -151,7 +151,7 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -172,7 +172,7 @@
       "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
           "expr": "histogram_quantile(0.95, rate(request_latency_seconds_bucket[5m]))",
           "legendFormat": "P95 Latency",
           "refId": "A"
@@ -182,7 +182,7 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -202,7 +202,7 @@
       "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
           "expr": "anomaly_predict_anomaly_total",
           "legendFormat": "Anomaly Count",
           "refId": "A"
@@ -212,7 +212,7 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
       "fieldConfig": {
         "defaults": { "unit": "s" },
         "overrides": []
@@ -222,19 +222,19 @@
       "options": { "legend": { "displayMode": "list" } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
           "expr": "histogram_quantile(0.50, rate(request_latency_seconds_bucket[5m]))",
           "legendFormat": "P50",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
           "expr": "histogram_quantile(0.95, rate(request_latency_seconds_bucket[5m]))",
           "legendFormat": "P95",
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
           "expr": "histogram_quantile(0.99, rate(request_latency_seconds_bucket[5m]))",
           "legendFormat": "P99",
           "refId": "C"
@@ -244,7 +244,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
       "fieldConfig": {
         "defaults": { "unit": "short" },
         "overrides": []
@@ -253,14 +253,14 @@
       "id": 6,
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "kube_deployment_status_replicas_available{deployment=\"sentiment-app\"}",
+          "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
+          "expr": "sum(up{job=\"sentiment-app\"})",
           "legendFormat": "Available Replicas",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "kube_deployment_spec_replicas{deployment=\"sentiment-app\"}",
+          "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
+          "expr": "1",
           "legendFormat": "Desired Replicas",
           "refId": "B"
         }
@@ -276,7 +276,7 @@
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
       "fieldConfig": {
         "defaults": { "unit": "short" },
         "overrides": []
@@ -285,13 +285,13 @@
       "id": 7,
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
           "expr": "rate(anomaly_predict_total[5m])",
           "legendFormat": "Prediction Rate",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "aiopsguard-prometheus" },
           "expr": "rate(anomaly_predict_anomaly_total[5m])",
           "legendFormat": "Anomaly Rate",
           "refId": "B"
@@ -308,7 +308,7 @@
       "type": "row"
     },
     {
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "datasource": { "type": "loki", "uid": "aiopsguard-loki" },
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 23 },
       "id": 8,
       "options": {
@@ -319,7 +319,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "datasource": { "type": "loki", "uid": "aiopsguard-loki" },
           "expr": "{app=\"sentiment-app\"}",
           "legendFormat": "",
           "refId": "A"
@@ -340,3 +340,5 @@
   "uid": "aiopsguard-main",
   "version": 1
 }
+
+

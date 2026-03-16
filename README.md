@@ -128,11 +128,88 @@ Access the services:
 make up
 ```
 
-Access the services at `localhost` on the same ports.
+Access the services at:
+
+| Service | URL |
+|---------|-----|
+| Operations UI | `http://localhost:5000/ui` |
+| Flask API | `http://localhost:5000/analyze` |
+| Grafana | `http://localhost:3000` |
+| Prometheus | `http://localhost:9090` |
+| Loki | `http://localhost:3100` |
+| MLflow | `http://localhost:5001` |
+| Anomaly detector | `http://localhost:8080` |
+
+Default operator key for protected UI actions in Docker Compose:
+
+```text
+aiopsguard-dev-key
+```
+
+---
+
+## Deployment Modes (No Ambiguity)
+
+The project supports two deployment paths. Feature availability differs by path:
+
+| Capability | Docker Compose | Kubernetes (Ansible/Minikube) |
+|------------|----------------|--------------------------------|
+| Flask API (`/analyze`) | ✅ | ✅ |
+| Operations UI (`/ui`) | ✅ | ✅ (same app image) |
+| UI operator auth (`X-API-Key`) | ✅ (default key set in compose env) | ✅ if `UI_API_KEY` is set in deployment env |
+| Fault injection control API | ✅ | ✅ |
+| Incident assistant API | ✅ | ✅ |
+| Persistent incident history (SQLite at `/app/data/incidents.db`) | ✅ (via named volume `incident_data`) | ⚠️ Requires PVC + `INCIDENT_DB_PATH` wiring; not provided by default manifests |
+| Grafana datasource auto-provisioning | ✅ (compose mount at `/etc/grafana/provisioning`) | ⚠️ Not auto-wired in current k8s manifests |
+| Grafana dashboard auto-loaded from file mount | ✅ | ⚠️ Not auto-wired in current k8s manifests |
+
+If you run Kubernetes and want parity with Compose, add:
+- `UI_API_KEY` environment variable on sentiment app deployment
+- Persistent storage + `INCIDENT_DB_PATH` for incident DB
+- Grafana provisioning ConfigMaps/volume mounts for datasources and dashboard provider
 
 ---
 
 ## Usage
+
+### Operations dashboard
+
+Open:
+
+```text
+http://localhost:5000/ui
+```
+
+Availability:
+- Compose: available at `http://localhost:5000/ui`
+- Kubernetes: available if the sentiment app service is exposed (same route path)
+
+The dashboard includes:
+- Sentiment test panel (`POST /analyze`)
+- Service health checks (`GET /ui/api/services`)
+- Metrics pulse from Prometheus (`GET /ui/api/metrics`)
+- Anomaly model probe (`POST /ui/api/anomaly`)
+- Incident assistant (`GET /ui/api/incident`) - protected
+- Fault injection control (`POST /ui/api/failure-rate`) - protected
+- Persistent incident timeline (`GET /ui/api/incident/history`)
+
+### Operator mode
+
+Two endpoints are protected by API key:
+- `GET /ui/api/incident`
+- `POST /ui/api/failure-rate`
+
+Pass header:
+
+```text
+X-API-Key: <your-key>
+```
+
+The dashboard top bar supports Viewer/Operator mode and stores the key in browser session storage.
+
+Important deployment note:
+- Compose sets `UI_API_KEY` by default (`aiopsguard-dev-key`)
+- Kubernetes enforces operator mode only when you explicitly set `UI_API_KEY`
 
 ### Sentiment analysis request
 
@@ -203,11 +280,22 @@ bash agent/run_agent.sh
 
 ### Grafana Dashboards
 
-After deployment, import `monitoring/grafana-dashboard.json` into Grafana:
+With Docker Compose, Grafana now auto-provisions:
+- Prometheus datasource (`http://prometheus:9090`)
+- Loki datasource (`http://loki:3100`)
+- Dashboard provider for `/var/lib/grafana/dashboards`
 
-1. Open Grafana at `http://localhost:3000`
-2. Go to **Dashboards → Import**
-3. Upload `monitoring/grafana-dashboard.json`
+The dashboard JSON is mounted as:
+
+```text
+monitoring/grafana-dashboard.json -> /var/lib/grafana/dashboards/aiopsguard.json
+```
+
+Manual import is no longer required for local Compose runs.
+
+Kubernetes note:
+- Current k8s manifests do not auto-provision Grafana datasources/dashboards.
+- For Kubernetes deployments, import dashboard/provision datasources manually (or add provisioning ConfigMaps).
 
 **Screenshot placeholder:**
 ![Grafana Dashboard](docs/screenshots/grafana-dashboard.png)
@@ -235,6 +323,24 @@ In Kubernetes, patch the deployment:
 kubectl set env deployment/sentiment-app FAILURE_RATE=0.3
 ```
 
+In the local dashboard, changing failure rate requires Operator mode (valid `X-API-Key`).
+
+---
+
+## Incident History
+
+Incident analyses generated from the dashboard are persisted in SQLite.
+
+- Default path in container: `/app/data/incidents.db`
+- Backed by Docker named volume: `incident_data`
+- API: `GET /ui/api/incident/history` returns latest 50 items (newest first)
+
+This allows incident timeline continuity across container restarts.
+
+Kubernetes note:
+- By default, current manifests do not provide persistent storage for this SQLite file.
+- To persist history in Kubernetes, mount a PVC and set `INCIDENT_DB_PATH` to that mounted path.
+
 ---
 
 ## Security Hardening
@@ -245,6 +351,7 @@ kubectl set env deployment/sentiment-app FAILURE_RATE=0.3
 - Secrets are stored in Kubernetes `Secret` objects (not in ConfigMaps).
 - The Ansible playbook does not store credentials in plain text.
 - Docker images use **multi-stage builds** to minimise attack surface.
+- Sensitive dashboard actions are protected with API key auth (`X-API-Key`).
 
 ---
 
