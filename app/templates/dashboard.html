@@ -20,6 +20,12 @@
       <a class="btn ghost" href="http://localhost:9090" target="_blank" rel="noreferrer">Prometheus</a>
       <a class="btn ghost" href="http://localhost:3000" target="_blank" rel="noreferrer">Grafana</a>
       <a class="btn ghost" href="http://localhost:5001" target="_blank" rel="noreferrer">MLflow</a>
+      <div class="auth-zone">
+        <span id="auth-badge" class="badge">VIEWER</span>
+        <input id="api-key-field" type="password" placeholder="Operator key…" autocomplete="off" />
+        <button id="api-key-apply" class="btn ghost sm">Unlock</button>
+        <button id="api-key-clear" class="btn ghost sm" style="display:none">Lock</button>
+      </div>
     </div>
   </header>
 
@@ -82,7 +88,15 @@
         <span id="failure-value">0.05</span>
       </div>
       <button id="failure-apply" class="btn warning">Apply Failure Rate</button>
-      <p id="failure-status" class="muted"></p>
+      <p id="failure-status" class="muted">
+        <span class="lock-hint">&#128274; Operator key required.</span>
+      </p>
+    </section>
+
+    <section class="panel history span-full">
+      <h2>Incident History</h2>
+      <p class="muted">Persistent log of all triggered incident analyses (newest first).</p>
+      <div id="history-list" class="history-list"></div>
     </section>
   </main>
 

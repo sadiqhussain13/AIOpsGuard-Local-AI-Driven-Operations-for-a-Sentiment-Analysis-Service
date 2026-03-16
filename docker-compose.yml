@@ -30,6 +30,8 @@ services:
       LOKI_URL: "http://loki:3100"
       MLFLOW_URL: "http://mlflow:5001"
       ANOMALY_DETECTOR_URL: "http://anomaly-detector:8080"
+      UI_API_KEY: "aiopsguard-dev-key"
+      INCIDENT_DB_PATH: "/app/data/incidents.db"
       FAILURE_RATE: "0.05"
       PORT: "5000"
     depends_on:
@@ -40,6 +42,8 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+    volumes:
+      - incident_data:/app/data
     user: "1001:1001"
 
   # ── Anomaly detector ──────────────────────────────────────────────────────
@@ -113,6 +117,7 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana-dashboard.json:/var/lib/grafana/dashboards/aiopsguard.json:ro
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
       - loki
@@ -122,3 +127,4 @@ volumes:
   mlflow_data:
   loki_data:
   grafana_data:
+  incident_data:

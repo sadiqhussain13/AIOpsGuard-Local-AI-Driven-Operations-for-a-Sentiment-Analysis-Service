@@ -10,6 +10,112 @@ const failureSlider = document.getElementById("failure-slider");
 const failureValue = document.getElementById("failure-value");
 const failureStatus = document.getElementById("failure-status");
 
+// ── Auth helpers ────────────────────────────────────────────────────────────
+const AUTH_KEY = "aiopsguard_api_key";
+const authBadge = document.getElementById("auth-badge");
+const apiKeyField = document.getElementById("api-key-field");
+const apiKeyApply = document.getElementById("api-key-apply");
+const apiKeyClear = document.getElementById("api-key-clear");
+
+function getApiKey() {
+  return sessionStorage.getItem(AUTH_KEY) || "";
+}
+
+function setApiKey(key) {
+  sessionStorage.setItem(AUTH_KEY, key.trim());
+}
+
+function clearApiKey() {
+  sessionStorage.removeItem(AUTH_KEY);
+}
+
+function updateAuthBadge() {
+  const key = getApiKey();
+  if (key) {
+    authBadge.textContent = "OPERATOR";
+    authBadge.className = "badge operator";
+    apiKeyClear.style.display = "";
+    apiKeyField.style.display = "none";
+    apiKeyApply.style.display = "none";
+    document.querySelectorAll(".lock-hint").forEach((el) => { el.style.display = "none"; });
+  } else {
+    authBadge.textContent = "VIEWER";
+    authBadge.className = "badge viewer";
+    apiKeyClear.style.display = "none";
+    apiKeyField.style.display = "";
+    apiKeyApply.style.display = "";
+    document.querySelectorAll(".lock-hint").forEach((el) => { el.style.display = ""; });
+  }
+}
+
+apiKeyApply.addEventListener("click", () => {
+  const val = apiKeyField.value.trim();
+  if (!val) return;
+  setApiKey(val);
+  apiKeyField.value = "";
+  updateAuthBadge();
+});
+
+apiKeyField.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") apiKeyApply.click();
+});
+
+apiKeyClear.addEventListener("click", () => {
+  clearApiKey();
+  updateAuthBadge();
+});
+
+/** Like fetchJson, but injects the operator key header when a key is stored. */
+async function fetchProtected(url, options = {}) {
+  const key = getApiKey();
+  const headers = { ...(options.headers || {}), "X-API-Key": key };
+  const resp = await fetch(url, { ...options, headers });
+  const data = await resp.json();
+  if (resp.status === 401) {
+    clearApiKey();
+    updateAuthBadge();
+    throw new Error("Invalid key — reverted to Viewer mode. Enter a valid Operator key.");
+  }
+  if (!resp.ok) {
+    throw new Error(data.error || `Request failed (${resp.status})`);
+  }
+  return data;
+}
+
+// ── History helpers ─────────────────────────────────────────────────────────
+const historyList = document.getElementById("history-list");
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+async function refreshHistory() {
+  try {
+    const items = await fetchJson("/ui/api/incident/history");
+    if (!items.length) {
+      historyList.innerHTML = `<p class="muted">No incidents recorded yet.</p>`;
+      return;
+    }
+    historyList.innerHTML = items
+      .map(
+        (r) => `
+        <div class="history-item">
+          <div class="history-meta">
+            <span class="source-tag">${escHtml(r.source || "unknown")}</span>
+            <span class="ts">${escHtml(r.timestamp.replace("T", " ").slice(0, 19))} UTC</span>
+          </div>
+          <div class="history-cause">${escHtml(r.root_cause || "—")}</div>
+        </div>`
+      )
+      .join("");
+  } catch (err) {
+    historyList.innerHTML = `<p class="muted">${err.message}</p>`;
+  }
+}
+
 const latencyTrend = [];
 
 function fmt(value, digits = 3) {
@@ -152,11 +258,12 @@ document.getElementById("incident-btn").addEventListener("click", async () => {
   incidentScript.textContent = "";
   incidentLogs.textContent = "";
   try {
-    const out = await fetchJson("/ui/api/incident");
+    const out = await fetchProtected("/ui/api/incident");
     incidentReasoning.textContent = `[${out.source}] ${out.root_cause}\n\n${out.reasoning}`;
     incidentScript.textContent = out.remediation_script || "No script returned";
     const logs = out.snapshot?.logs || [];
     incidentLogs.textContent = logs.join("\n");
+    refreshHistory();
   } catch (err) {
     incidentReasoning.textContent = err.message;
   }
@@ -168,7 +275,7 @@ failureSlider.addEventListener("input", () => {
 
 document.getElementById("failure-apply").addEventListener("click", async () => {
   try {
-    const out = await fetchJson("/ui/api/failure-rate", {
+    const out = await fetchProtected("/ui/api/failure-rate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ failure_rate: Number(failureSlider.value) }),
@@ -180,8 +287,9 @@ document.getElementById("failure-apply").addEventListener("click", async () => {
 });
 
 async function refreshAll() {
-  await Promise.all([refreshServices(), refreshMetrics()]);
+  await Promise.all([refreshServices(), refreshMetrics(), refreshHistory()]);
 }
 
+updateAuthBadge();
 refreshAll();
 setInterval(refreshAll, 8000);

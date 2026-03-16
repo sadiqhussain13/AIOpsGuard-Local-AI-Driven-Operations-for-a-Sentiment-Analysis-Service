@@ -11,11 +11,16 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any
+
+from datetime import datetime, timezone
+from functools import wraps
 
 from flask import Flask, jsonify, redirect, render_template, request
 from prometheus_client import make_wsgi_app
@@ -45,6 +50,75 @@ ANOMALY_DETECTOR_URL: str = os.environ.get(
     "ANOMALY_DETECTOR_URL", "http://localhost:8080"
 )
 INCIDENT_USE_LLM: bool = os.environ.get("INCIDENT_USE_LLM", "0") == "1"
+
+# Auth
+UI_API_KEY: str = os.environ.get("UI_API_KEY", "")
+
+# Incident history DB
+DB_PATH: str = os.environ.get("INCIDENT_DB_PATH", "/app/data/incidents.db")
+_db_lock = threading.Lock()
+
+
+def _init_db() -> None:
+    """Create the incidents table if it does not yet exist."""
+    try:
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS incidents (
+                    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp          TEXT NOT NULL,
+                    root_cause         TEXT,
+                    reasoning          TEXT,
+                    remediation_script TEXT,
+                    source             TEXT,
+                    severity           TEXT
+                )
+                """
+            )
+            conn.commit()
+    except Exception as exc:
+        logger.warning("Could not initialise incident DB at %s: %s", DB_PATH, exc)
+
+
+def _save_incident(result: dict) -> None:
+    """Persist an incident analysis record to SQLite."""
+    ts = datetime.now(timezone.utc).isoformat()
+    try:
+        with _db_lock, sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                "INSERT INTO incidents "
+                "(timestamp, root_cause, reasoning, remediation_script, source, severity) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    ts,
+                    result.get("root_cause", ""),
+                    result.get("reasoning", ""),
+                    result.get("remediation_script", ""),
+                    result.get("source", ""),
+                    result.get("severity", "unknown"),
+                ),
+            )
+            conn.commit()
+    except Exception as exc:
+        logger.warning("Could not save incident: %s", exc)
+
+
+def require_operator(f):
+    """Decorator: enforce X-API-Key when UI_API_KEY env var is set."""
+    @wraps(f)
+    def _inner(*args, **kwargs):
+        if UI_API_KEY:
+            provided = request.headers.get("X-API-Key", "")
+            if provided != UI_API_KEY:
+                return (
+                    jsonify({"error": "Unauthorized: valid X-API-Key header required"}),
+                    401,
+                )
+        return f(*args, **kwargs)
+    return _inner
+
 
 _llm: Any | None = None
 
@@ -240,6 +314,9 @@ def _classify_sentiment(text: str) -> str:
 # ---------------------------------------------------------------------------
 app = Flask(__name__)
 
+# Initialise the incident history database at startup (best-effort).
+_init_db()
+
 
 @app.get("/")
 def index() -> Any:
@@ -338,12 +415,16 @@ def ui_anomaly_predict() -> Any:
 
 
 @app.get("/ui/api/incident")
+@require_operator
 def ui_incident_assistant() -> Any:
     """Return incident triage summary with suggested remediation script."""
-    return jsonify(_build_incident_response())
+    result = _build_incident_response()
+    _save_incident(result)
+    return jsonify(result)
 
 
 @app.post("/ui/api/failure-rate")
+@require_operator
 def ui_set_failure_rate() -> Any:
     """Update runtime fault-injection failure rate (0.0 to 1.0)."""
     payload = request.get_json(silent=True) or {}
@@ -356,6 +437,21 @@ def ui_set_failure_rate() -> Any:
 
     os.environ["FAILURE_RATE"] = str(rate)
     return jsonify({"failure_rate": rate, "status": "updated"})
+
+
+@app.get("/ui/api/incident/history")
+def ui_incident_history() -> Any:
+    """Return the last 50 incidents from the persistent store, newest first."""
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT id, timestamp, root_cause, source, severity "
+                "FROM incidents ORDER BY id DESC LIMIT 50"
+            ).fetchall()
+        return jsonify([dict(r) for r in rows])
+    except Exception as exc:
+        return jsonify({"error": str(exc), "items": []}), 500
 
 
 @app.post("/analyze")

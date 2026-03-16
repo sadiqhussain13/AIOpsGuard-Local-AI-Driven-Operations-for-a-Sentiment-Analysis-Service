@@ -24,6 +24,9 @@ COPY app.py fault_injector.py metrics.py ./
 COPY templates ./templates
 COPY static ./static
 
+# Persistent data directory (incident history DB)
+RUN mkdir -p /app/data && chown 1001:1001 /app/data
+
 USER appuser
 
 ENV PORT=5000 \

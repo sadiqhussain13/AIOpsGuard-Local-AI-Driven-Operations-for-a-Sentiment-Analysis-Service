@@ -59,6 +59,7 @@ h1 {
   display: flex;
   gap: 0.6rem;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .grid {
@@ -95,6 +96,8 @@ h1 {
 .anomaly { grid-column: span 4; }
 .incident { grid-column: span 4; }
 .fault { grid-column: span 12; }
+.history { grid-column: span 12; }
+.span-full { grid-column: 1 / -1; }
 
 textarea,
 input {
@@ -132,6 +135,105 @@ textarea {
 
 .btn.warning {
   background: linear-gradient(90deg, #ffb350, #ffd085);
+}
+
+.btn.sm {
+  margin-top: 0;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+/* ── Auth zone ──────────────────────────────────────────────────────────── */
+.auth-zone {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: 0.5rem;
+}
+
+.auth-zone input {
+  width: 180px;
+  margin: 0;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.82rem;
+}
+
+.badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.badge.viewer {
+  background: rgba(149, 172, 184, 0.25);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+.badge.operator {
+  background: rgba(81, 220, 127, 0.18);
+  color: var(--good);
+  border: 1px solid rgba(81, 220, 127, 0.45);
+}
+
+.lock-hint {
+  color: var(--warn);
+  font-size: 0.84rem;
+}
+
+/* ── Incident history ───────────────────────────────────────────────────── */
+.history-list {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.6rem;
+}
+
+.history-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  background: rgba(7, 18, 26, 0.55);
+  transition: border-color 160ms;
+}
+
+.history-item:hover {
+  border-color: rgba(99, 213, 255, 0.45);
+}
+
+.history-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.3rem;
+}
+
+.source-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(99, 213, 255, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(99, 213, 255, 0.3);
+  text-transform: uppercase;
+}
+
+.history-item .ts {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+}
+
+.history-cause {
+  font-size: 0.88rem;
+  color: var(--ink);
 }
 
 .health-grid {
@@ -249,8 +351,12 @@ textarea {
   .metrics,
   .anomaly,
   .incident,
-  .fault {
+  .fault,
+  .history {
     grid-column: span 12;
+  }
+  .auth-zone input {
+    width: 120px;
   }
   .anomaly-grid {
     grid-template-columns: 1fr;
