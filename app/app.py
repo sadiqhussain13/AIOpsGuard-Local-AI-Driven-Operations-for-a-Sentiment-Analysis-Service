@@ -8,6 +8,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import logging
 import os
@@ -38,6 +39,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+class _LokiHandler(logging.Handler):
+    """Lightweight log handler that pushes entries to Loki's HTTP push API.
+
+    Flushes every message immediately to work correctly in
+    pre-forked servers like gunicorn (daemon threads don't survive fork).
+    """
+
+    def __init__(self, url: str, labels: dict[str, str] | None = None):
+        super().__init__()
+        self._url = url.rstrip("/") + "/loki/api/v1/push"
+        self._labels = labels or {"job": "sentiment-app"}
+
+    def emit(self, record: logging.LogRecord) -> None:
+        ts = str(int(record.created * 1e9))
+        line = self.format(record)
+        body = json.dumps(
+            {"streams": [{"stream": self._labels, "values": [[ts, line]]}]}
+        ).encode()
+        req = urllib.request.Request(
+            self._url, data=body, headers={"Content-Type": "application/json"},
+        )
+        try:
+            urllib.request.urlopen(req, timeout=2)
+        except Exception:
+            pass  # best-effort; don't break the app if Loki is down
+
 # ---------------------------------------------------------------------------
 # LangChain / Ollama
 # ---------------------------------------------------------------------------
@@ -50,6 +78,12 @@ ANOMALY_DETECTOR_URL: str = os.environ.get(
     "ANOMALY_DETECTOR_URL", "http://localhost:8080"
 )
 INCIDENT_USE_LLM: bool = os.environ.get("INCIDENT_USE_LLM", "0") == "1"
+DEPLOY_MODE: str = os.environ.get("DEPLOY_MODE", "compose")  # "compose" or "k8s"
+
+# Attach Loki log handler so app logs are queryable in Loki
+_loki_handler = _LokiHandler(LOKI_URL, labels={"job": "sentiment-app", "service": "sentiment-app"})
+_loki_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+logging.getLogger().addHandler(_loki_handler)
 
 # Auth
 UI_API_KEY: str = os.environ.get("UI_API_KEY", "")
@@ -130,7 +164,10 @@ def _get_llm() -> Any:
         try:
             from langchain_ollama import OllamaLLM  # type: ignore[import]
 
-            _llm = OllamaLLM(model=OLLAMA_MODEL, base_url=OLLAMA_BASE_URL)
+            _llm = OllamaLLM(
+                model=OLLAMA_MODEL, base_url=OLLAMA_BASE_URL,
+                timeout=30,
+            )
             logger.info("Ollama LLM initialised (model=%s)", OLLAMA_MODEL)
         except Exception as exc:  # pragma: no cover
             logger.warning("Could not load Ollama LLM: %s", exc)
@@ -186,6 +223,9 @@ def _http_json(
         return False, 0, elapsed_ms, {"error": str(exc)}
 
 
+import math
+
+
 def _prom_query_scalar(expression: str) -> float | None:
     """Query a scalar-like Prometheus expression and return a float."""
     qs = urllib.parse.urlencode({"query": expression})
@@ -196,23 +236,31 @@ def _prom_query_scalar(expression: str) -> float | None:
         result = data.get("data", {}).get("result", [])
         if not result:
             return None
-        return float(result[0]["value"][1])
+        val = float(result[0]["value"][1])
+        if math.isnan(val) or math.isinf(val):
+            return None
+        return val
     except Exception:
         return None
 
 
 def _recent_loki_logs(limit: int = 20) -> list[str]:
     """Return recent log lines from Loki, when available."""
+    # First check if Loki is reachable at all
+    ready_ok, _, _, _ = _http_json(f"{LOKI_URL}/ready")
+    if not ready_ok:
+        return [f"Loki unavailable at {LOKI_URL}"]
+
     params = urllib.parse.urlencode(
         {
-            "query": "{job=~\".*\"}",
+            "query": '{job=~".+"}',
             "limit": str(limit),
             "start": str(int((time.time() - 300) * 1e9)),
         }
     )
     ok, _, _, data = _http_json(f"{LOKI_URL}/loki/api/v1/query_range?{params}")
     if not ok:
-        return [f"Loki unavailable at {LOKI_URL}"]
+        return ["Loki is reachable but returned no log streams (check log shipping)."]
 
     lines: list[str] = []
     for stream in data.get("data", {}).get("result", []):
@@ -221,6 +269,62 @@ def _recent_loki_logs(limit: int = 20) -> list[str]:
     if not lines:
         return ["No logs found in Loki for the last 5 minutes."]
     return lines[-limit:]
+
+
+def _restart_command(service: str = "sentiment-app") -> str:
+    """Return the correct restart command for the current deployment mode."""
+    if DEPLOY_MODE == "k8s":
+        return f"kubectl rollout restart deployment/{service} -n default"
+    return f"docker compose restart {service}"
+
+
+def _heuristic_analysis(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Produce a rule-based incident analysis from the telemetry snapshot."""
+    issues: list[str] = []
+    severity = "info"
+    remediation_parts: list[str] = []
+
+    # -- error rate ---------------------------------------------------------
+    error_rps = snapshot.get("error_rps")
+    if error_rps and error_rps > 0:
+        issues.append(f"Elevated error rate ({error_rps:.4f} err/s)")
+        severity = "warning" if error_rps < 1.0 else "critical"
+        remediation_parts.append(_restart_command("sentiment-app"))
+
+    # -- p95 latency -------------------------------------------------------
+    p95 = snapshot.get("p95_latency_sec")
+    if p95 is not None and p95 > 2.0:
+        issues.append(f"High p95 latency ({p95:.2f}s)")
+        if severity == "info":
+            severity = "warning"
+
+    # -- anomaly detector --------------------------------------------------
+    anomaly = snapshot.get("anomaly") or {}
+    if "error" in anomaly:
+        issues.append(f"Anomaly detector error: {anomaly['error']}")
+        remediation_parts.append(_restart_command("anomaly-detector"))
+    elif anomaly.get("anomaly") is True:
+        issues.append("Anomaly detector flagged current metrics as anomalous")
+        severity = "critical" if severity != "critical" else severity
+
+    # -- loki logs ---------------------------------------------------------
+    logs = snapshot.get("logs", [])
+    log_issues = [l for l in logs if "unavailable" in l.lower() or "error" in l.lower()]
+    if log_issues:
+        issues.append(f"{len(log_issues)} warning(s) in recent logs")
+
+    root_cause = "; ".join(issues) if issues else "No critical signal detected"
+    if not remediation_parts:
+        remediation_parts.append("# No immediate action required")
+
+    return {
+        "source": "heuristic",
+        "root_cause": root_cause,
+        "severity": severity,
+        "reasoning": f"Automated heuristic analysis. Snapshot: {json.dumps(snapshot)}",
+        "remediation_script": "\n".join(remediation_parts),
+        "snapshot": snapshot,
+    }
 
 
 def _build_incident_response() -> dict[str, Any]:
@@ -245,37 +349,39 @@ def _build_incident_response() -> dict[str, Any]:
         "logs": logs[-8:],
     }
 
+    # ---- heuristic path (LLM disabled or unavailable) --------------------
     llm = _get_llm() if INCIDENT_USE_LLM else None
     if llm is None:
-        return {
-            "source": "heuristic",
-            "root_cause": "No critical signal detected" if not error_rps else "Elevated request errors",
-            "reasoning": (
-                "Fallback heuristic used because LLM is unavailable. "
-                f"Snapshot: {json.dumps(snapshot)}"
-            ),
-            "remediation_script": "kubectl rollout restart deployment/sentiment-app -n default",
-            "snapshot": snapshot,
-        }
+        return _heuristic_analysis(snapshot)
 
+    # ---- LLM path --------------------------------------------------------
+    mode_hint = (
+        "docker compose" if DEPLOY_MODE == "compose" else "kubectl"
+    )
     prompt = (
         "You are an SRE assistant. Given this JSON snapshot, return valid JSON only with keys "
-        "root_cause, reasoning, remediation_script, severity. Keep remediation_script to kubectl commands only.\n\n"
+        f"root_cause, reasoning, remediation_script, severity. Use {mode_hint} commands for remediation_script.\n\n"
         f"snapshot={json.dumps(snapshot)}"
     )
     try:
-        raw = str(llm.invoke(prompt)).strip()
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        future = pool.submit(lambda: str(llm.invoke(prompt)).strip())
+        raw = future.result(timeout=45)
+        pool.shutdown(wait=False)
         parsed = json.loads(raw)
         parsed["source"] = "llm"
         parsed["snapshot"] = snapshot
         return parsed
+    except (concurrent.futures.TimeoutError, TimeoutError):
+        pool.shutdown(wait=False)
+        logger.warning("LLM timed out; falling back to heuristic")
+        return _heuristic_analysis(snapshot)
     except Exception:
         return {
             "source": "llm-fallback",
             "root_cause": "Model response parsing failed",
-            "reasoning": "LLM returned non-JSON output; falling back to safe default remediation.",
-            "remediation_script": "kubectl rollout restart deployment/sentiment-app -n default",
-            "snapshot": snapshot,
+            "reasoning": "LLM returned non-JSON output; falling back to heuristic.",
+            **_heuristic_analysis(snapshot),
         }
 
 
@@ -316,6 +422,13 @@ app = Flask(__name__)
 
 # Initialise the incident history database at startup (best-effort).
 _init_db()
+
+
+@app.after_request
+def _log_request(response):
+    """Log every HTTP request so Loki has visibility into traffic."""
+    logger.info("%s %s %s", request.method, request.path, response.status_code)
+    return response
 
 
 @app.get("/")

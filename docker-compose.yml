@@ -30,6 +30,8 @@ services:
       LOKI_URL: "http://loki:3100"
       MLFLOW_URL: "http://mlflow:5001"
       ANOMALY_DETECTOR_URL: "http://anomaly-detector:8080"
+      INCIDENT_USE_LLM: "1"
+      DEPLOY_MODE: "compose"
       UI_API_KEY: "aiopsguard-dev-key"
       INCIDENT_DB_PATH: "/app/data/incidents.db"
       FAILURE_RATE: "0.05"
